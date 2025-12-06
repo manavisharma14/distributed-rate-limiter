@@ -16,12 +16,19 @@ const ipLimiter = new TokenBucket(20, 60000);
 
 fastify.get("/limiter-swl", async(request, reply) => {
     const clientIp = request.ip;
-    const ipAllowed = await ipLimiter.isAllowed(clientIp);
+    let ipAllowed = true;
 
-    if(!ipAllowed){
-        return reply.code(429).send({ error: "too many requests from this ip"});
+    try{
+        ipAllowed = await ipLimiter.isAllowed(clientIp);
+    } catch(err){
+        fastify.log.error(err, "ip limiter redis error");
+        reply.header('X-RateLimit-Status', "degraded-ip")
     }
 
+    if(!ipAllowed){
+        return reply.code(429).send({ error : "too many requests from this ip"})
+    }
+    
     const raw = request.headers['x-api-key'];
     const apiKey = (Array.isArray(raw) ? raw[0] : raw)?.trim()
     if(!apiKey){
@@ -36,11 +43,34 @@ fastify.get("/limiter-swl", async(request, reply) => {
     const userLimit = apiInfo.limit
     const identifier = apiKey;
 
-    
 
-    const keyLimiter = new SlidingWindowLog(userLimit, 60000)
-    const [allowed, count, remaining, retryAfter] = 
-        await keyLimiter!.isAllowed(identifier);
+    let allowed = true;
+    let remaining = userLimit;
+    let retryAfter = 0;
+
+    try{
+        const keyLimiter = new SlidingWindowLog(userLimit, 60000)
+        const result = await keyLimiter.isAllowed(identifier);
+
+        allowed = result[0];
+        remaining = result[2];
+        retryAfter = result[3];
+    } catch(err){
+        fastify.log.error(err, "sliding window redis error");
+        reply.header('X-RateLimit-Status', "degraded-key")
+        allowed = true;
+    }
+ 
+    fastify.log.info(
+        {
+            apiKey,
+            clientIp,
+            allowed, 
+            remaining,
+            retryAfter
+        },
+        "rate limit decision"
+    )
 
     reply.header('X-RateLimit-Limit', userLimit);
     reply.header('X-RateLimit-Remaining', remaining)
