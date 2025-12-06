@@ -4,7 +4,7 @@ import TokenBucket from './limiter/tokenBucket.js'
 import SlidingWindowLog from './limiter/slidingWindowLog.js'
 import { apiKeys } from './lib/apiKeys.js'
 
-const fastify = Fastify({
+export const fastify = Fastify({
     logger: true
 })
 
@@ -133,13 +133,19 @@ fastify.get('/redis-test', async() => {
     return { value };
 })
 
-const start = async() => {
-    try {
-        await fastify.listen({ port: 3000, host: "0.0.0.0" })
-        fastify.log.info('server running at http://localhost:3000')
-    } catch(err) {
-        fastify.log.error(err);
-        process.exit(1);
-    }
+// const start = async() => {
+//     try {
+//         await fastify.listen({ port: 3000, host: "0.0.0.0" })
+//         fastify.log.info('server running at http://localhost:3000')
+//     } catch(err) {
+//         fastify.log.error(err);
+//         process.exit(1);
+//     }
+// }
+// start();
+
+if(process.env.NODE_ENV !== "test"){
+    fastify.listen({ port: 3000, host: "0.0.0.0"}).then(() => {
+        fastify.log.info("server running at http://localhost:3000")
+    });
 }
-start();
